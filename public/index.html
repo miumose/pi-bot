@@ -9,7 +9,7 @@
 	:root { --bg:#fff; --fg:#1a1a1a; --mute:#888; --line:#e8e8e8; --soft:#f5f5f4; --pin:#f0efec; --acc:#1a1a1a; --dot:#e5484d; }
 	@media (prefers-color-scheme: dark) { :root { --bg:#141414; --fg:#e8e8e8; --mute:#777; --line:#2a2a2a; --soft:#1e1e1e; --pin:#1a1a1a; --acc:#e8e8e8; } }
 	* { box-sizing:border-box; }
-	body { margin:0; height:100vh; display:flex; background:var(--bg); color:var(--fg); font:17px/1.6 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; }
+	body { margin:0; height:100vh; height:100dvh; display:flex; background:var(--bg); color:var(--fg); font:17px/1.6 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; }
 	button { font:inherit; color:inherit; }
 	.btn { all:unset; cursor:pointer; padding:4px 10px; border-radius:8px; font-size:15px; border:1px solid var(--line); }
 	.btn:hover { background:var(--soft); }
@@ -76,8 +76,8 @@
 	.e { color:var(--dot); font-size:15px; }
 	.empty { color:var(--mute); text-align:center; margin-top:20vh; }
 	.empty .av { margin:0 auto 12px; width:64px; height:64px; font-size:32px; }
-	form { display:flex; gap:8px; padding:12px max(16px, calc(50% - 380px)) 20px; }
-	textarea { flex:1; resize:none; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:12px; padding:10px 14px; font:inherit; max-height:200px; outline:none; }
+	form { display:flex; gap:8px; padding:12px max(16px, calc(50% - 380px)) 20px; position:relative; }
+	textarea { flex:1; resize:none; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:14px; padding:14px 16px; font:inherit; min-height:60px; max-height:240px; outline:none; }
 	textarea:focus { border-color:var(--mute); }
 	#send { all:unset; cursor:pointer; background:var(--acc); color:var(--bg); border-radius:12px; padding:0 18px; }
 
@@ -133,7 +133,22 @@
 	#dDel { color:var(--dot); border-color:transparent; }
 	#dSave { background:var(--acc); color:var(--bg); border-color:var(--acc); }
 	#dSave:disabled { opacity:.35; cursor:default; }
-	@media (max-width:700px) { aside { width:68px; } #pins { grid-template-columns:1fr; padding:4px 0; } .pin .nm { display:none; } .pin .av { width:40px; height:40px; font-size:20px; } aside header { justify-content:center; } .bot { padding:10px 14px; } .meta, aside header span { display:none; } }
+	/* 移动端：不要侧栏，右下角按钮呼出全屏 bot 列表 */
+	#botsBtn { display:none; }
+	@media (max-width:700px) {
+		aside { display:none; position:fixed; inset:0; width:auto; z-index:6; background:var(--bg); border:none; }
+		body.showBots aside { display:flex; }
+		#botsBtn { display:grid; place-items:center; position:absolute; right:16px; bottom:100%; margin-bottom:6px; width:48px; height:48px; border-radius:50%; border:1px solid var(--line); background:var(--bg); box-shadow:0 4px 16px #0002; font-size:22px; cursor:pointer; z-index:7; }
+		#botsBtn .dot { position:absolute; top:2px; right:2px; width:12px; height:12px; border-radius:50%; background:var(--dot); border:2px solid var(--bg); }
+		#top { padding:8px 12px; gap:6px; }
+		#top select { max-width:34vw; }
+		#log { padding:16px 14px 64px; }
+		form { padding:10px 12px calc(12px + env(safe-area-inset-bottom)); }
+		textarea { min-height:72px; font-size:17px; }
+		#send { padding:0 16px; }
+		.u { max-width:88%; }
+		.bot { padding:12px 16px; }
+	}
 </style>
 </head>
 <body>
@@ -155,7 +170,8 @@
 	</div>
 	<div id="log"></div>
 	<form id="f">
-		<textarea id="in" rows="1" placeholder="说点什么… (Enter 发送, Shift+Enter 换行)" autofocus></textarea>
+		<button type="button" id="botsBtn" title="所有 bot">💬</button>
+		<textarea id="in" rows="1" placeholder="说点什么… (Enter 发送, Shift+Enter 换行)"></textarea>
 		<button id="send">发送</button>
 	</form>
 </main>
@@ -238,7 +254,7 @@ function render(messages) {
 		if (m.role === "user") el("div", "u", textOf(m.content));
 		else if (m.role === "assistant") {
 			for (const c of m.content) {
-				if (c.type === "thinking" && c.thinking) el("div", "th", c.thinking);
+				if (c.type === "thinking" && c.thinking?.trim()) el("div", "th", c.thinking.trim());
 				else if (c.type === "text") el("div", "a").innerHTML = md(c.text);
 				else if (c.type === "toolCall") tool(c.id, c.name, c.arguments);
 			}
@@ -258,6 +274,7 @@ function renderBots() {
 	const sorted = [...bots].sort((a, b) => b.lastAt - a.lastAt);
 	const av = (b) => `<div class="av">${esc(b.avatar)}${unread.has(b.id) ? '<i class="dot"></i>' : ""}${b.busy ? '<i class="spin"></i>' : ""}</div>`;
 	const on = (b) => b.id === curBot ? "on" : "";
+	$("#botsBtn").innerHTML = (document.body.classList.contains("showBots") ? "✕" : "💬") + (bots.some(b => b.id !== curBot && unread.has(b.id)) ? '<i class="dot"></i>' : "");
 	$("#tip").style.display = "none";
 	$("#pins").innerHTML = sorted.filter(b => b.pinned).sort((a, b) => (a.pinOrder ?? 0) - (b.pinOrder ?? 0)).map(b => `
 		<div class="bot pin ${on(b)}" data-id="${b.id}" draggable="true">${av(b)}<span class="nm">${esc(b.name)}</span></div>`).join("");
@@ -335,10 +352,15 @@ function select(id) {
 	if (!id) return;
 	curBot = id; localStorage.setItem("bot", id);
 	unread.delete(id); saveUnread();
+	document.body.classList.remove("showBots");
 	log.innerHTML = ""; renderBots();
 	rpc({ t: "select", bot: id });
-	input.focus();
+	if (!isMobile()) input.focus(); // 手机上自动聚焦会弹键盘
 }
+// ---- 移动端 bot 列表 ----
+const isMobile = () => matchMedia("(max-width:700px)").matches;
+const isTouch = matchMedia("(pointer:coarse)").matches;
+$("#botsBtn").onclick = () => { document.body.classList.toggle("showBots"); renderBots(); };
 
 // ---- 编辑 bot（右侧抽屉）----
 const TEMPLATES = {
@@ -505,7 +527,15 @@ const handlers = {
 	busy(m) { setBusy(m.v); if (!m.v) cur = null; },
 	assistant_start() { cur = null; },
 	text(m) { stick(() => { if (!cur) newAssistant(); cur.text += m.d; cur.el.innerHTML = md(cur.text); }); },
-	thinking(m) { stick(() => { if (!cur) newAssistant(); if (!cur.th) { cur.th = el("div", "th"); log.insertBefore(cur.th, cur.el); } cur.th.textContent += m.d; }); },
+	thinking(m) {
+		stick(() => {
+			if (!cur) newAssistant();
+			cur.thText = (cur.thText || "") + m.d;
+			if (!cur.thText.trim()) return; // 空白思考不显示
+			if (!cur.th) { cur.th = el("div", "th"); log.insertBefore(cur.th, cur.el); }
+			cur.th.textContent = cur.thText.trimStart();
+		});
+	},
 	tool_start(m) { stick(() => tool(m.id, m.name, m.args)); },
 	tool_end(m) { toolDone(m.id, m.result, m.isError); },
 	error(m) { stick(() => el("div", "e", m.msg)); },
@@ -538,7 +568,9 @@ function submit() {
 	input.value = ""; input.style.height = "";
 }
 $("#f").onsubmit = (e) => { e.preventDefault(); submit(); };
-input.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); } };
+// 触屏上回车换行，用按钮发送
+input.onkeydown = (e) => { if (!isTouch && e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); } };
+if (isTouch) input.placeholder = "说点什么…";
 input.oninput = () => { input.style.height = ""; input.style.height = input.scrollHeight + "px"; setBusy(busy); };
 $("#newSess").onclick = () => rpc({ t: "new", bot: curBot });
 modelSel.onchange = () => rpc({ t: "model", bot: curBot, value: modelSel.value });
