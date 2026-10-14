@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>pi</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<style>
+	:root { --bg:#fff; --fg:#1a1a1a; --mute:#888; --line:#e8e8e8; --soft:#f5f5f4; --pin:#f0efec; --acc:#1a1a1a; --dot:#e5484d; }
+	@media (prefers-color-scheme: dark) { :root { --bg:#141414; --fg:#e8e8e8; --mute:#777; --line:#2a2a2a; --soft:#1e1e1e; --pin:#1a1a1a; --acc:#e8e8e8; } }
+	* { box-sizing:border-box; }
+	body { margin:0; height:100vh; display:flex; background:var(--bg); color:var(--fg); font:17px/1.6 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; }
+	button { font:inherit; color:inherit; }
+	.btn { all:unset; cursor:pointer; padding:4px 10px; border-radius:8px; font-size:15px; border:1px solid var(--line); }
+	.btn:hover { background:var(--soft); }
+	select { background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:4px 6px; font-size:14px; max-width:280px; }
+
+	/* 侧栏 bot 列表 */
+	aside { width:360px; border-right:1px solid var(--line); display:flex; flex-direction:column; }
+	aside header { display:flex; align-items:center; justify-content:space-between; padding:14px 14px 10px; font-weight:600; }
+	#bots { flex:1; overflow-y:auto; }
+	/* 快速新建 */
+	#quick { display:none; padding:0 14px 12px; border-bottom:1px solid var(--line); }
+	#quick.show { display:block; }
+	#quick input { width:100%; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font:inherit; font-size:16px; outline:none; }
+	#quick input:focus { border-color:var(--mute); }
+	#avs { display:grid; grid-template-columns:repeat(10, 1fr); gap:2px; margin-top:8px; }
+	#avs button { all:unset; cursor:pointer; text-align:center; font-size:18px; line-height:30px; border-radius:6px; }
+	#avs button:hover { background:var(--soft); }
+	#avs button.on { background:var(--line); outline:1px solid var(--mute); }
+	input.bad, #drawer input.bad { border-color:var(--dot) !important; color:var(--dot); }
+	#quick:has(.bad) .hint { color:var(--dot); }
+	#quick .hint { font-size:13px; color:var(--mute); margin-top:6px; }
+	.bot { display:flex; gap:10px; padding:10px 14px; cursor:pointer; position:relative; }
+	.bot:hover { background:var(--soft); }
+	.bot.on { background:var(--line); }
+	/* 置顶：5 个一排，头像+名称 */
+	#pins { display:grid; grid-template-columns:repeat(5, 1fr); gap:4px; padding:4px 10px 10px; border-bottom:1px solid var(--line); background:var(--pin); }
+	#pins:empty { display:none; }
+	.pin { display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 2px 6px; border-radius:10px; cursor:pointer; min-width:0; }
+	.pin:hover { background:var(--soft); }
+	.pin.dragging { opacity:.35; }
+	.pin.on { background:var(--line); }
+	.pin .av { width:48px; height:48px; font-size:24px; border-radius:12px; }
+	.pin .nm { font-size:14px; max-width:100%; }
+	#tip { position:fixed; z-index:8; max-width:260px; background:var(--fg); color:var(--bg); font-size:14px; line-height:1.5; padding:6px 10px; border-radius:8px; pointer-events:none; display:none; }
+	.av { flex:none; width:40px; height:40px; border-radius:10px; background:var(--soft); border:1px solid var(--line); display:grid; place-items:center; font-size:20px; position:relative; }
+	.av .dot { position:absolute; top:-3px; right:-3px; width:10px; height:10px; border-radius:50%; background:var(--dot); border:2px solid var(--bg); }
+	.av .spin { position:absolute; bottom:-3px; right:-3px; width:12px; height:12px; border-radius:50%; border:2px solid var(--mute); border-top-color:transparent; animation:r 1s linear infinite; background:var(--bg); }
+	@keyframes r { to { transform:rotate(360deg); } }
+	.meta { flex:1; min-width:0; }
+	.row { display:flex; justify-content:space-between; gap:6px; }
+	.nm { font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	.tm, .pv { font-size:14px; color:var(--mute); }
+	.pv { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	#menu { position:fixed; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:4px; box-shadow:0 6px 24px #0002; display:none; z-index:9; min-width:120px; }
+	#menu button { all:unset; display:block; cursor:pointer; padding:6px 12px; border-radius:6px; font-size:15px; }
+	#menu button:hover { background:var(--soft); }
+	#menu button.danger { color:var(--dot); }
+
+	/* 聊天区 */
+	main { flex:1; display:flex; flex-direction:column; min-width:0; }
+	#top { display:flex; align-items:center; gap:8px; padding:10px 16px; border-bottom:1px solid var(--line); }
+	#top .title { flex:1; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+	#log { flex:1; overflow-y:auto; padding:24px max(16px, calc(50% - 380px)); }
+	.u { background:var(--soft); padding:8px 14px; border-radius:14px; margin:16px 0 16px auto; width:fit-content; max-width:80%; white-space:pre-wrap; }
+	.a { margin:12px 0; }
+	.a p:first-child { margin-top:0; }
+	.a pre { background:var(--soft); padding:10px; border-radius:8px; overflow-x:auto; font-size:15px; }
+	.a code { font-family:ui-monospace, Consolas, monospace; font-size:.9em; }
+	.th { color:var(--mute); font-size:15px; white-space:pre-wrap; border-left:2px solid var(--line); padding-left:10px; margin:8px 0; max-height:160px; overflow-y:auto; }
+	details.tool { font-size:15px; color:var(--mute); margin:6px 0; }
+	details.tool summary { cursor:pointer; font-family:ui-monospace, Consolas, monospace; }
+	details.tool pre { white-space:pre-wrap; max-height:300px; overflow-y:auto; background:var(--soft); padding:8px; border-radius:6px; }
+	details.tool.err summary { color:var(--dot); }
+	.e { color:var(--dot); font-size:15px; }
+	.empty { color:var(--mute); text-align:center; margin-top:20vh; }
+	.empty .av { margin:0 auto 12px; width:64px; height:64px; font-size:32px; }
+	form { display:flex; gap:8px; padding:12px max(16px, calc(50% - 380px)) 20px; }
+	textarea { flex:1; resize:none; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:12px; padding:10px 14px; font:inherit; max-height:200px; outline:none; }
+	textarea:focus { border-color:var(--mute); }
+	#send { all:unset; cursor:pointer; background:var(--acc); color:var(--bg); border-radius:12px; padding:0 18px; }
+
+	/* 编辑 bot：右侧抽屉 */
+	.panel { position:fixed; top:0; right:0; bottom:0; width:min(420px, 100vw); background:var(--bg); border-left:1px solid var(--line); box-shadow:-8px 0 32px #0001; transform:translateX(105%); transition:transform .2s ease; display:flex; flex-direction:column; z-index:7; }
+	.panel.show { transform:none; }
+	.panel .hd { display:flex; align-items:center; gap:12px; padding:18px 20px 14px; border-bottom:1px solid var(--line); }
+	#dAv { all:unset; cursor:pointer; width:56px; height:56px; border-radius:14px; background:var(--soft); border:1px solid var(--line); display:grid; place-items:center; font-size:28px; flex:none; }
+	#dAv:hover { border-color:var(--mute); }
+	#dName { flex:1; min-width:0; all:unset; font-size:18px; font-weight:600; padding:4px 6px; border-radius:6px; border:1px solid transparent; }
+	#dName:hover, #dName:focus { border-color:var(--line); }
+	#dClose { all:unset; cursor:pointer; color:var(--mute); font-size:18px; padding:4px 8px; border-radius:6px; }
+	#dClose:hover { background:var(--soft); }
+	.panel .bd { flex:1; overflow-y:auto; padding:6px 20px 20px; }
+	#dAvs { display:none; grid-template-columns:repeat(10, 1fr); gap:2px; padding:10px 0 4px; }
+	#dAvs.show { display:grid; }
+	#dAvs button { all:unset; cursor:pointer; text-align:center; font-size:20px; line-height:34px; border-radius:6px; }
+	#dAvs button:hover { background:var(--soft); }
+	#dAvs button.on { background:var(--line); }
+	#dAvs input { grid-column:span 10; margin-top:4px; }
+	.fl { display:block; font-size:14px; color:var(--mute); margin:18px 0 6px; }
+	.panel input:not(#dName), .panel textarea, .panel select { width:100%; max-width:none; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; font-size:16px; outline:none; }
+	.panel input:focus, .panel textarea:focus, .panel select:focus { border-color:var(--mute); }
+	#dPrompt { min-height:200px; resize:vertical; line-height:1.6; }
+	#dMem { min-height:140px; resize:vertical; line-height:1.6; font-size:15px; }
+	.fl .ops { float:right; }
+	.fl .ops button { all:unset; cursor:pointer; color:var(--mute); margin-left:10px; }
+	.fl .ops button:hover { color:var(--dot); }
+	.chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+	.chips button { all:unset; cursor:pointer; font-size:14px; padding:2px 10px; border-radius:99px; border:1px solid var(--line); color:var(--mute); }
+	.chips button:hover { color:var(--fg); border-color:var(--mute); }
+	.sw { display:flex; align-items:center; justify-content:space-between; margin-top:18px; font-size:16px; }
+	.sw input { display:none; }
+	.sw i { width:36px; height:20px; border-radius:99px; background:var(--line); position:relative; cursor:pointer; transition:.15s; }
+	.sw i::after { content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:var(--bg); transition:.15s; }
+	.sw input:checked + i { background:var(--acc); }
+	.sw input:checked + i::after { left:18px; }
+	.panel .ft { display:flex; align-items:center; gap:8px; padding:12px 20px; border-top:1px solid var(--line); }
+	.panel .ft .sp { flex:1; }
+	.panel .hd h3 { flex:1; margin:0; font-size:18px; }
+	/* 设置页 */
+	.prov { display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:6px 10px; padding:10px 0; border-bottom:1px solid var(--line); }
+	.prov .pn { font-size:15px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+	.prov .st { font-size:13px; color:var(--mute); white-space:nowrap; }
+	.prov .st.ok { color:#2a9d5c; }
+	.prov .del { all:unset; cursor:pointer; font-size:13px; color:var(--mute); }
+	.prov .del:hover { color:var(--dot); }
+	.prov .row2 { grid-column:1 / -1; display:flex; gap:8px; }
+	.prov input { flex:1; min-width:0; font-size:14px !important; padding:6px 10px !important; }
+	.prov .row2 button { flex:none; }
+	#sMore { all:unset; cursor:pointer; font-size:13px; color:var(--mute); margin-top:10px; display:inline-block; }
+	.note { font-size:13px; color:var(--mute); margin-top:6px; line-height:1.6; }
+	#dDel { color:var(--dot); border-color:transparent; }
+	#dSave { background:var(--acc); color:var(--bg); border-color:var(--acc); }
+	#dSave:disabled { opacity:.35; cursor:default; }
+	@media (max-width:700px) { aside { width:68px; } #pins { grid-template-columns:1fr; padding:4px 0; } .pin .nm { display:none; } .pin .av { width:40px; height:40px; font-size:20px; } aside header { justify-content:center; } .bot { padding:10px 14px; } .meta, aside header span { display:none; } }
+</style>
+</head>
+<body>
+<aside>
+	<header><span>Bots</span><span style="display:flex;gap:6px"><button class="btn" id="openSettings" title="设置">⚙</button><button class="btn" id="addBot" title="新建 bot">＋<span> 新建</span></button></span></header>
+	<div id="quick">
+		<input id="qName" placeholder="bot 名字，回车创建" maxlength="20" />
+		<div id="avs"></div>
+		<div class="hint" id="qHint">Enter 创建 · Esc 取消 · 人设等可在创建后右键「编辑」</div>
+	</div>
+	<div id="bots"><div id="pins"></div><div id="rest"></div></div>
+</aside>
+<main>
+	<div id="top">
+		<div class="title" id="title"></div>
+		<select id="model" title="模型"></select>
+		<button class="btn" id="newSess" title="开新会话">新会话</button>
+		<button class="btn" id="editBot" title="编辑 bot">⋯</button>
+	</div>
+	<div id="log"></div>
+	<form id="f">
+		<textarea id="in" rows="1" placeholder="说点什么… (Enter 发送, Shift+Enter 换行)" autofocus></textarea>
+		<button id="send">发送</button>
+	</form>
+</main>
+<div id="menu"></div>
+<div id="tip"></div>
+<div id="settings" class="panel">
+	<div class="hd"><h3>设置</h3><button id="sClose" class="btn" title="关闭 (Esc)">✕</button></div>
+	<div class="bd">
+		<label class="fl">默认模型 <span style="opacity:.7">· 没单独选模型的 bot 都用它</span></label>
+		<select id="sModel"></select>
+		<label class="fl">API Key <span style="opacity:.7">· 由 pi 保存在本机 ~/.pi/agent/auth.json，不写入项目目录</span></label>
+		<div id="sProv"></div>
+		<button id="sMore" type="button">显示全部服务商</button>
+		<div class="note">也可以用环境变量（如 OPENCODE_API_KEY、DEEPSEEK_API_KEY、ANTHROPIC_API_KEY）配置，来源会显示为「环境变量」。</div>
+	</div>
+</div>
+<div id="drawer" class="panel">
+	<div class="hd">
+		<button id="dAv" title="换头像"></button>
+		<input id="dName" maxlength="20" placeholder="名字" />
+		<button id="dClose" title="关闭 (Esc)">✕</button>
+	</div>
+	<div class="bd">
+		<div id="dAvs"></div>
+		<label class="fl">人设 / 指令 <span style="opacity:.7">· 追加到 pi 的 system prompt 后</span></label>
+		<textarea id="dPrompt" placeholder="描述这个 bot 是谁、怎么回答…"></textarea>
+		<div class="chips" id="dTpl"></div>
+		<label class="fl">模型</label>
+		<select id="dModel"></select>
+		<label class="fl">工作目录</label>
+		<input id="cwdIn" />
+		<label class="fl">记忆 <span style="opacity:.7">· 只属于这个 bot，换新会话也记得</span><span class="ops"><button type="button" id="dMemClear">清空</button></span></label>
+		<textarea id="dMem" placeholder="还没有记忆。对 bot 说「记住…」它会自己写进来，也可以直接在这里编辑。"></textarea>
+		<label class="sw">置顶<input type="checkbox" id="dPin" /><i></i></label>
+	</div>
+	<div class="ft">
+		<button class="btn" id="dDel">删除</button>
+		<span class="sp"></span>
+		<button class="btn" id="dCancel">取消</button>
+		<button class="btn" id="dSave" title="Ctrl+Enter">保存</button>
+	</div>
+</div>
+<script>
+const $ = (s) => document.querySelector(s);
+const log = $("#log"), input = $("#in"), sendBtn = $("#send"), modelSel = $("#model");
+let ws, bots = [], models = [], defaultModel = "", curBot = localStorage.getItem("bot"), busy = false, cur = null, curFile = null, tools = {};
+const unread = new Set(JSON.parse(localStorage.getItem("unread") || "[]"));
+const saveUnread = () => localStorage.setItem("unread", JSON.stringify([...unread]));
+const rpc = (m) => ws.send(JSON.stringify(m));
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+
+// ---- 消息渲染 ----
+const md = (s) => marked.parse(s || "");
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; log.append(e); return e; };
+const atBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+const stick = (f) => { const b = atBottom(); f(); if (b) log.scrollTop = log.scrollHeight; };
+const textOf = (c) => typeof c === "string" ? c : (c || []).filter(x => x.type === "text").map(x => x.text).join("\n");
+const argStr = (a) => String(a?.command ?? a?.path ?? JSON.stringify(a)).slice(0, 120);
+
+function tool(id, name, args) {
+	const d = el("details", "tool");
+	d.innerHTML = `<summary></summary><pre></pre>`;
+	d.firstChild.textContent = `⚙ ${name}  ${argStr(args)}`;
+	tools[id] = d; cur = null;
+}
+function toolDone(id, result, isError) {
+	const d = tools[id]; if (!d) return;
+	d.querySelector("pre").textContent = result;
+	if (isError) d.classList.add("err");
+}
+function newAssistant() { cur = { el: el("div", "a"), text: "", th: null }; }
+
+function render(messages) {
+	log.innerHTML = ""; tools = {}; cur = null;
+	if (!messages.length) {
+		const b = bots.find(b => b.id === curBot);
+		log.innerHTML = `<div class="empty"><div class="av">${esc(b?.avatar)}</div>和 ${esc(b?.name)} 开始聊天吧</div>`;
+	}
+	for (const m of messages) {
+		if (m.role === "user") el("div", "u", textOf(m.content));
+		else if (m.role === "assistant") {
+			for (const c of m.content) {
+				if (c.type === "thinking" && c.thinking) el("div", "th", c.thinking);
+				else if (c.type === "text") el("div", "a").innerHTML = md(c.text);
+				else if (c.type === "toolCall") tool(c.id, c.name, c.arguments);
+			}
+			if (m.errorMessage) el("div", "e", m.errorMessage);
+		} else if (m.role === "toolResult") toolDone(m.toolCallId, textOf(m.content), m.isError);
+	}
+	log.scrollTop = log.scrollHeight;
+}
+
+// ---- bot 列表 ----
+const fmtTime = (t) => {
+	const d = new Date(t), now = new Date();
+	return d.toDateString() === now.toDateString() ? d.toTimeString().slice(0, 5) : `${d.getMonth() + 1}/${d.getDate()}`;
+};
+function renderBots() {
+	if (dragId) return; // 拖动中不重绘，结束后会再刷新
+	const sorted = [...bots].sort((a, b) => b.lastAt - a.lastAt);
+	const av = (b) => `<div class="av">${esc(b.avatar)}${unread.has(b.id) ? '<i class="dot"></i>' : ""}${b.busy ? '<i class="spin"></i>' : ""}</div>`;
+	const on = (b) => b.id === curBot ? "on" : "";
+	$("#tip").style.display = "none";
+	$("#pins").innerHTML = sorted.filter(b => b.pinned).sort((a, b) => (a.pinOrder ?? 0) - (b.pinOrder ?? 0)).map(b => `
+		<div class="bot pin ${on(b)}" data-id="${b.id}" draggable="true">${av(b)}<span class="nm">${esc(b.name)}</span></div>`).join("");
+	$("#rest").innerHTML = sorted.filter(b => !b.pinned).map(b => `
+		<div class="bot ${on(b)}" data-id="${b.id}">
+			${av(b)}
+			<div class="meta">
+				<div class="row"><span class="nm">${esc(b.name)}</span><span class="tm">${fmtTime(b.lastAt)}</span></div>
+				<div class="pv">${esc(b.lastText)}</div>
+			</div>
+		</div>`).join("");
+	const b = bots.find(b => b.id === curBot);
+	$("#title").textContent = b ? `${b.avatar} ${b.name}` : "";
+}
+// 置顶 bot 拖动排序
+let dragId = null;
+$("#pins").ondragstart = (e) => {
+	const it = e.target.closest(".pin"); if (!it) return;
+	dragId = it.dataset.id; it.classList.add("dragging");
+	e.dataTransfer.effectAllowed = "move";
+	tip.style.display = "none";
+};
+$("#pins").ondragover = (e) => {
+	if (!dragId) return;
+	e.preventDefault();
+	const over = e.target.closest(".pin"), drag = $(`.pin[data-id="${dragId}"]`);
+	if (!over || over === drag) return;
+	const r = over.getBoundingClientRect();
+	over.parentNode.insertBefore(drag, e.clientX < r.left + r.width / 2 ? over : over.nextSibling);
+};
+$("#pins").ondragend = () => {
+	if (!dragId) return;
+	$(`.pin[data-id="${dragId}"]`)?.classList.remove("dragging");
+	dragId = null;
+	const ids = [...document.querySelectorAll("#pins .pin")].map(e => e.dataset.id);
+	ids.forEach((id, i) => { const b = bots.find(b => b.id === id); if (b) b.pinOrder = i; });
+	rpc({ t: "reorder_pins", ids });
+	renderBots();
+};
+// 置顶 bot 悬停显示最新消息
+const tip = $("#tip");
+$("#pins").onmouseover = (e) => {
+	if (dragId) return;
+	const it = e.target.closest(".pin"); if (!it) return;
+	const b = bots.find(x => x.id === it.dataset.id);
+	tip.textContent = b?.lastText ? `${b.lastText}  · ${fmtTime(b.lastAt)}` : "暂无消息";
+	const r = it.getBoundingClientRect();
+	tip.style.display = "block";
+	tip.style.left = Math.min(r.left, innerWidth - tip.offsetWidth - 8) + "px";
+	tip.style.top = r.bottom + 4 + "px";
+};
+$("#pins").onmouseleave = () => tip.style.display = "none";
+$("#bots").onclick = (e) => { const it = e.target.closest(".bot"); if (it) select(it.dataset.id); };
+$("#bots").oncontextmenu = (e) => {
+	const it = e.target.closest(".bot"); if (!it) return;
+	e.preventDefault();
+	const b = bots.find(x => x.id === it.dataset.id);
+	const menu = $("#menu");
+	menu.innerHTML = `<button data-a="pin">${b.pinned ? "取消置顶" : "置顶"}</button><button data-a="edit">编辑</button><button data-a="del" class="danger">删除</button>`;
+	menu.style.left = e.clientX + "px"; menu.style.top = e.clientY + "px"; menu.style.display = "block";
+	menu.onclick = (ev) => {
+		const a = ev.target.dataset.a;
+		if (a === "pin") rpc({ t: "pin", bot: b.id });
+		if (a === "edit") openDlg(b);
+		if (a === "del" && confirm(`删除「${b.name}」？（会话文件会保留在 data/sessions）`)) {
+			rpc({ t: "delete_bot", bot: b.id });
+			if (curBot === b.id) curBot = null;
+		}
+		menu.style.display = "none";
+	};
+};
+document.addEventListener("click", () => $("#menu").style.display = "none");
+
+function select(id) {
+	if (!id) return;
+	curBot = id; localStorage.setItem("bot", id);
+	unread.delete(id); saveUnread();
+	log.innerHTML = ""; renderBots();
+	rpc({ t: "select", bot: id });
+	input.focus();
+}
+
+// ---- 编辑 bot（右侧抽屉）----
+const TEMPLATES = {
+	"翻译": "你是专业翻译。中文译成英文，其他语言译成中文。只输出译文，保留原文格式。",
+	"润色": "你是中文写作编辑。改进用户文字的表达、逻辑和语气，保持原意，先给改写结果，再用一两句说明改了什么。",
+	"代码": "你是资深工程师。回答简洁，优先给可运行的代码，必要时直接读写工作目录里的文件。",
+	"简洁": "回答尽量简短，不寒暄，不重复问题，能一句话说清就一句话。",
+	"毒舌": "你说话直接、略带毒舌，但信息准确靠谱。",
+};
+let editing = null, dAvatar = "", dSnap = "";
+const nameTaken = (name, selfId) => bots.some(b => b.id !== selfId && b.name.trim().toLowerCase() === name.trim().toLowerCase());
+const dVals = () => ({ avatar: dAvatar, name: $("#dName").value.trim(), prompt: $("#dPrompt").value.trim(), model: $("#dModel").value, cwd: $("#cwdIn").value.trim(), pinned: $("#dPin").checked });
+let memLoaded = "";
+const dDirty = () => {
+	const name = $("#dName").value.trim(), dup = !!name && nameTaken(name, editing?.id);
+	$("#dName").classList.toggle("bad", dup);
+	$("#dName").title = dup ? "已有同名 bot" : "";
+	$("#dSave").disabled = !name || dup || (JSON.stringify(dVals()) === dSnap && $("#dMem").value === memLoaded);
+};
+function renderDAvs() {
+	$("#dAv").textContent = dAvatar;
+	$("#dAvs").innerHTML = AVATARS.map(a => `<button type="button" class="${a === dAvatar ? "on" : ""}">${a}</button>`).join("")
+		+ `<input id="dAvIn" maxlength="4" placeholder="或输入任意 emoji / 文字" />`;
+}
+function openDlg(bot) {
+	if (!bot) return;
+	editing = bot; dAvatar = bot.avatar;
+	renderDAvs(); $("#dAvs").classList.remove("show");
+	$("#dName").value = bot.name; $("#dPrompt").value = bot.prompt;
+	$("#dModel").innerHTML = `<option value="">默认（${esc(defaultModel)}）</option>` + models.map(m => `<option>${esc(m)}</option>`).join("");
+	$("#dModel").value = bot.model; $("#cwdIn").value = bot.cwd; $("#dPin").checked = bot.pinned;
+	$("#dTpl").innerHTML = Object.keys(TEMPLATES).map(k => `<button type="button">${k}</button>`).join("");
+	memLoaded = ""; $("#dMem").value = "";
+	rpc({ t: "memory_get", bot: bot.id });
+	dSnap = JSON.stringify(dVals()); dDirty();
+	$("#drawer").classList.add("show");
+}
+function closeDlg(force) {
+	if (!force && !$("#dSave").disabled && !confirm("有未保存的修改，放弃？")) return;
+	$("#drawer").classList.remove("show"); editing = null;
+}
+function saveDlg() {
+	if (!editing || $("#dSave").disabled) return;
+	const v = dVals();
+	if (v.pinned !== editing.pinned) rpc({ t: "pin", bot: editing.id });
+	rpc({ t: "save_bot", bot: editing.id, data: v });
+	if ($("#dMem").value !== memLoaded) rpc({ t: "memory_set", bot: editing.id, text: $("#dMem").value.trim() ? $("#dMem").value.trim() + "\n" : "" });
+	closeDlg(true);
+}
+$("#dMemClear").onclick = () => { if ($("#dMem").value && confirm("清空这个 bot 的全部记忆？（保存后生效）")) { $("#dMem").value = ""; dDirty(); } };
+$("#dAv").onclick = () => $("#dAvs").classList.toggle("show");
+$("#dAvs").onclick = (e) => { if (e.target.tagName === "BUTTON") { dAvatar = e.target.textContent; renderDAvs(); $("#dAvs").classList.add("show"); dDirty(); } };
+$("#dAvs").oninput = (e) => { if (e.target.id === "dAvIn" && e.target.value.trim()) { dAvatar = e.target.value.trim(); $("#dAv").textContent = dAvatar; dDirty(); } };
+$("#dTpl").onclick = (e) => {
+	const t = TEMPLATES[e.target.textContent]; if (!t) return;
+	const p = $("#dPrompt"); p.value = p.value.trim() ? p.value.trim() + "\n" + t : t; dDirty();
+};
+$("#drawer").oninput = dDirty;
+$("#drawer").onchange = dDirty;
+$("#drawer").onkeydown = (e) => {
+	if (e.key === "Escape") closeDlg();
+	if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) saveDlg();
+};
+$("#dClose").onclick = () => closeDlg();
+$("#dCancel").onclick = () => closeDlg();
+$("#dSave").onclick = saveDlg;
+$("#dDel").onclick = () => {
+	if (!confirm(`删除「${editing.name}」？（会话文件会保留在 data/sessions）`)) return;
+	rpc({ t: "delete_bot", bot: editing.id });
+	if (curBot === editing.id) curBot = null;
+	closeDlg(true);
+};
+// 快速新建：只填名字，头像随机预选，可点选替换
+const AVATARS = ["🤖","🦊","🐱","🐼","🦉","🐙","🐳","🦄","🐸","🐧","🌐","📝","💡","🧠","🎨","📚","🔧","🚀","🍀","⚡"];
+let qAv = "";
+function renderAvs() { $("#avs").innerHTML = AVATARS.map(a => `<button type="button" class="${a === qAv ? "on" : ""}">${a}</button>`).join(""); }
+function openQuick() {
+	qAv = AVATARS[Math.floor(Math.random() * AVATARS.length)];
+	renderAvs();
+	$("#quick").classList.add("show");
+	$("#qName").value = ""; $("#qName").oninput(); $("#qName").focus();
+}
+const closeQuick = () => $("#quick").classList.remove("show");
+$("#avs").onclick = (e) => { if (e.target.tagName === "BUTTON") { qAv = e.target.textContent; renderAvs(); $("#qName").focus(); } };
+$("#qName").onkeydown = (e) => {
+	if (e.key === "Escape") closeQuick();
+	if (e.key !== "Enter" || e.isComposing) return;
+	const name = $("#qName").value.trim();
+	if (!name || nameTaken(name)) return;
+	rpc({ t: "save_bot", data: { name, avatar: qAv, prompt: "", model: "", cwd: "" } });
+	closeQuick();
+};
+$("#qName").oninput = () => {
+	const dup = nameTaken($("#qName").value);
+	$("#qName").classList.toggle("bad", dup);
+	$("#qHint").textContent = dup ? "已有同名 bot，换个名字" : "Enter 创建 · Esc 取消 · 人设等可在创建后右键「编辑」";
+};
+$("#addBot").onclick = () => $("#quick").classList.contains("show") ? closeQuick() : openQuick();
+$("#editBot").onclick = () => { const b = bots.find(b => b.id === curBot); if (b) openDlg(b); };
+
+// ---- 设置页 ----
+const COMMON = ["opencode-go", "opencode", "deepseek", "anthropic", "openai", "openrouter", "google", "moonshotai", "zai", "xai", "minimax"];
+const SRC = { stored: "已配置", environment: "环境变量", runtime: "运行时", fallback: "已配置", models_json_key: "models.json", models_json_command: "models.json" };
+let sData = null, sAll = false;
+function renderSettings() {
+	if (!sData) return;
+	const sel = $("#sModel");
+	sel.innerHTML = sData.allModels.map(m => `<option>${esc(m)}</option>`).join("");
+	sel.value = sData.defaultModel;
+	const list = sData.providers.filter(p => sAll || COMMON.includes(p.id) || p.configured)
+		.sort((a, b) => (b.configured - a.configured) || (COMMON.indexOf(a.id) + 1 || 99) - (COMMON.indexOf(b.id) + 1 || 99));
+	$("#sProv").innerHTML = list.map(p => `
+		<div class="prov" data-p="${esc(p.id)}">
+			<span class="pn" title="${esc(p.id)}">${esc(p.id)}</span>
+			<span class="st ${p.configured ? "ok" : ""}">${p.configured ? "✓ " + (SRC[p.source] || "已配置") : "未配置"}</span>
+			${p.source === "stored" ? '<button class="del" data-a="del">删除</button>' : "<span></span>"}
+			<div class="row2">
+				<input type="password" placeholder="${p.configured ? "输入新 key 替换" : "粘贴 API Key"}" autocomplete="off" />
+				<button class="btn" data-a="save">保存</button>
+			</div>
+		</div>`).join("");
+	$("#sMore").textContent = sAll ? "只显示常用" : "显示全部服务商";
+}
+$("#openSettings").onclick = () => { rpc({ t: "settings_get" }); $("#settings").classList.add("show"); };
+$("#sClose").onclick = () => $("#settings").classList.remove("show");
+$("#settings").onkeydown = (e) => {
+	if (e.key === "Escape") $("#settings").classList.remove("show");
+	if (e.key === "Enter" && e.target.closest(".prov")) e.target.closest(".prov").querySelector('[data-a="save"]').click();
+};
+$("#sMore").onclick = () => { sAll = !sAll; renderSettings(); };
+$("#sModel").onchange = () => rpc({ t: "set_default_model", bot: curBot, value: $("#sModel").value });
+$("#sProv").onclick = (e) => {
+	const a = e.target.dataset.a, row = e.target.closest(".prov"); if (!a || !row) return;
+	if (a === "save") {
+		const key = row.querySelector("input").value.trim(); if (!key) return;
+		rpc({ t: "set_key", provider: row.dataset.p, key });
+	}
+	if (a === "del" && confirm(`删除 ${row.dataset.p} 的 API Key？`)) rpc({ t: "set_key", provider: row.dataset.p, key: "" });
+};
+
+// ---- 服务端事件 ----
+function setBusy(v) { busy = v; sendBtn.textContent = v && !input.value.trim() ? "停止" : "发送"; }
+const handlers = {
+	models(m) {
+		models = m.list;
+		const keep = modelSel.value;
+		modelSel.innerHTML = m.list.map(x => `<option>${esc(x)}</option>`).join("");
+		if (keep) modelSel.value = keep;
+		$("#cwdIn").placeholder = m.defaultCwd; defaultModel = m.defaultModel;
+	},
+	bots(m) {
+		bots = m.list;
+		if (!bots.find(b => b.id === curBot)) select(bots[0]?.id);
+		renderBots();
+	},
+	selected(m) { select(m.bot); },
+	settings(m) { sData = m; renderSettings(); },
+	memory(m) {
+		// 抽屉开着且用户没改过记忆框时，实时同步（比如 bot 刚调用了 remember）
+		if (!editing || editing.id !== m.bot || $("#dMem").value !== memLoaded) return;
+		memLoaded = m.text; $("#dMem").value = m.text; dDirty();
+	},
+	state(m) { curFile = m.sessionFile; render(m.messages); setBusy(m.busy); if (m.model) modelSel.value = m.model; },
+	busy(m) { setBusy(m.v); if (!m.v) cur = null; },
+	assistant_start() { cur = null; },
+	text(m) { stick(() => { if (!cur) newAssistant(); cur.text += m.d; cur.el.innerHTML = md(cur.text); }); },
+	thinking(m) { stick(() => { if (!cur) newAssistant(); if (!cur.th) { cur.th = el("div", "th"); log.insertBefore(cur.th, cur.el); } cur.th.textContent += m.d; }); },
+	tool_start(m) { stick(() => tool(m.id, m.name, m.args)); },
+	tool_end(m) { toolDone(m.id, m.result, m.isError); },
+	error(m) { stick(() => el("div", "e", m.msg)); },
+};
+function onMsg(m) {
+	// 非当前 bot 的流式事件：只记未读
+	if (m.bot && m.bot !== curBot && m.t !== "selected" && m.t !== "memory") {
+		if (m.t === "busy" && !m.v) { unread.add(m.bot); saveUnread(); renderBots(); }
+		return;
+	}
+	handlers[m.t]?.(m);
+}
+
+function connect() {
+	ws = new WebSocket(`ws://${location.host}`);
+	ws.onmessage = (e) => onMsg(JSON.parse(e.data));
+	ws.onopen = () => { if (curBot) rpc({ t: "select", bot: curBot }); };
+	ws.onclose = () => setTimeout(connect, 1000);
+}
+connect();
+
+// ---- 输入 ----
+function submit() {
+	const text = input.value.trim();
+	if (!text) { if (busy) rpc({ t: "abort", bot: curBot }); return; }
+	if (log.querySelector(".empty")) log.innerHTML = "";
+	stick(() => el("div", "u", text));
+	cur = null;
+	rpc({ t: "prompt", bot: curBot, text });
+	input.value = ""; input.style.height = "";
+}
+$("#f").onsubmit = (e) => { e.preventDefault(); submit(); };
+input.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); } };
+input.oninput = () => { input.style.height = ""; input.style.height = input.scrollHeight + "px"; setBusy(busy); };
+$("#newSess").onclick = () => rpc({ t: "new", bot: curBot });
+modelSel.onchange = () => rpc({ t: "model", bot: curBot, value: modelSel.value });
+</script>
+</body>
+</html>
